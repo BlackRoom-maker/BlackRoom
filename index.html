@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BlackRoom — Base Local</title>
+  <meta name="description" content="Central privada local com histórico persistente." />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <!-- fontes opcionais (ficam 404 se não existirem; podemos trocar no CSS) -->
+  <link rel="preload" href="assets/fonts/Inter-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/IBMPlexMono-Var.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- sem CSS inline -->
+  <link rel="stylesheet" href="assets/css/main.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" />
+
+</head>
+
+<body class="no-js" data-theme="blackroom">
+  <!-- HUD decorativo (JS vai animar depois) -->
+  <div id="hud" aria-hidden="true">
+    <canvas id="hud-grid"></canvas>
+    <div id="scanline"></div>
+  </div>
+
+  <!-- Topo: branding + estado + identidade local -->
+  <header id="topbar" role="banner">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/></svg>
+      <h1 class="title">BLACKROOM</h1>
+      <span class="subtitle">Local & Persistente</span>
+    </div>
+
+    <div class="status" role="status" aria-live="polite">
+      <div class="stat"><span class="k">Estado</span><strong id="ws-status">OFFLINE</strong></div>
+      <div class="stat"><span class="k">Peers</span><strong id="peer-count">00</strong></div>
+      <div class="stat"><span class="k">Sala</span><strong id="room-current">alpha</strong></div>
+      <div class="stat"><span class="k">UTC</span><strong id="clock-utc">--:--:--</strong></div>
+    </div>
+
+    <nav class="actions" aria-label="Ações">
+      <button class="btn ghost" id="btn-connect" aria-pressed="false">Conectar</button>
+      <button class="btn ghost" id="btn-panic" aria-label="Ocultar">Pânico</button>
+    </nav>
+  </header>
+
+  <!-- Layout principal -->
+  <main id="layout" role="main">
+    <!-- Sidebar esquerda: salas + dispositivos -->
+    <aside id="sidebar" aria-label="Salas e dispositivos">
+      <section class="panel rooms">
+        <header class="panel-head">
+          <h2>Salas</h2>
+          <div class="room-controls">
+            <select id="room-select" aria-label="Selecionar sala">
+              <option value="alpha" selected>alpha</option>
+            </select>
+            <button class="btn small" id="room-add">+</button>
+          </div>
+        </header>
+        <ul class="list" id="room-list" role="listbox" aria-label="Lista de salas">
+          <li class="item active" data-room="alpha" role="option" aria-selected="true">
+            <span class="name">alpha</span>
+            <time class="last">—</time>
+          </li>
+        </ul>
+      </section>
+
+      <section class="panel devices">
+        <header class="panel-head">
+          <h2>Dispositivo Local</h2>
+        </header>
+        <div class="device-card">
+          <div class="row"><span class="k">Label</span><strong id="device-label">—</strong></div>
+          <div class="row"><span class="k">IP</span><strong id="device-ip">—</strong></div>
+          <div class="row"><span class="k">UA</span><strong id="device-ua">—</strong></div>
+          <div class="actions-inline">
+            <button class="btn tiny" id="device-edit">Editar Label</button>
+            <button class="btn tiny" id="device-register">Registar</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel logs">
+        <header class="panel-head">
+          <h2>Logs</h2>
+          <button class="btn tiny" id="logs-clear">Limpar</button>
+        </header>
+        <div class="log-stream" id="log-stream" role="log" aria-live="polite"></div>
+      </section>
+    </aside>
+
+<!-- Centro: conversa -->
+<section id="chat" aria-label="Conversa">
+  <header class="chat-head">
+    <div class="meta">
+      <h2 class="room-title">#<span id="room-title">alpha</span></h2>
+      <div class="badges">
+        <span class="badge e2ee" title="(futuro) Criptografia ponta-a-ponta">E2EE</span>
+        <span class="badge persist" title="Histórico local persistente">PERSIST</span>
+      </div>
+    </div>
+    <div class="chat-actions">
+      <button class="btn tiny" id="btn-history" type="button">Carregar Histórico</button>
+    </div>
+  </header>
+
+  <!-- Timeline -->
+  <div class="message-list" id="message-list" role="list" aria-label="Histórico de mensagens"></div>
+
+  <!-- Composer -->
+  <form id="composer" class="composer" aria-label="Enviar mensagem" autocomplete="off" method="post" action=".">
+    <div class="composer-left">
+      <button class="icon" type="button" id="btn-attach" aria-label="Anexar">📎</button>
+      <button class="icon" type="button" id="btn-selfdestruct" aria-label="Autodestruição">💥</button>
+    </div>
+
+    <label class="sr-only" for="input-msg">Mensagem</label>
+    <input id="input-msg" name="msg" type="text" placeholder="Escreva uma mensagem…" maxlength="4000" />
+
+    <div class="composer-right">
+      <button class="icon" type="button" id="btn-mic" aria-label="Gravar voz">🎤</button>
+      <button class="btn send" type="submit" id="btn-send">Enviar</button>
+    </div>
+
+    <!-- Input de ficheiros (oculto) -->
+    <input id="attach-input" type="file" multiple hidden />
+  </form>
+</section>
+
+<!-- Overlay de drop (fica invisível até arrastar ficheiros) -->
+<div id="drop-overlay" aria-hidden="true">
+  <div class="drop-box" role="status" aria-live="polite">
+    Solte os ficheiros para enviar
+  </div>
+</div>
+
+
+    <!-- Direita: telemetria -->
+    <aside id="widgets" aria-label="Telemetria e consola">
+      <section class="panel telemetry">
+        <header class="panel-head"><h2>Telemetria</h2></header>
+        <div class="grid-3">
+          <div class="mini"><span class="k">Ping</span><strong id="tele-ping">—</strong></div>
+          <div class="mini"><span class="k">Uptime</span><strong id="tele-uptime">—</strong></div>
+          <div class="mini"><span class="k">Sync</span><strong id="tele-sync">—</strong></div>
+        </div>
+        <canvas class="spark" id="sparkline" height="40" aria-hidden="true"></canvas>
+      </section>
+
+      <section class="panel console">
+        <header class="panel-head">
+          <h2>Consola</h2>
+          <button class="btn tiny" id="console-run">Run</button>
+        </header>
+        <div class="terminal" id="terminal-out" role="region" aria-label="Saída de consola">
+          <pre><code>&gt; pronto para comandos
+</code></pre>
+        </div>
+        <form class="terminal-input" id="terminal-form" aria-label="Entrada de comando" method="post" action=".">
+          <input type="text" id="terminal-cmd" placeholder="› Digite um comando (ex.: /nick Alpha iPhone 13)" />
+        </form>
+      </section>
+    </aside>
+  </main>
+
+  <!-- Painel “Pânico” (começa oculto) -->
+  <section id="stealth-panel" hidden aria-hidden="true" aria-label="Painel oculto">
+    <div class="stealth-inner">
+      <div class="stealth-head">
+        <h3>ACCESS: PHANTOM</h3>
+        <button class="btn tiny" data-action="stealth-close">Fechar</button>
+      </div>
+      <ul class="stealth-actions">
+        <li><button class="btn small" id="action-rotate">Rotate Room Key</button></li>
+        <li><button class="btn small" id="action-invite">Invite via Public Key</button></li>
+        <li><button class="btn small danger" id="action-wipe">Wipe Ephemeral State</button></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- sem JS inline; o ficheiro virá no próximo passo -->
+   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js" defer></script>
+  <script src="assets/js/app.js" defer></script>
+</body>
+</html>
